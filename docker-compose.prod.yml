@@ -1,0 +1,84 @@
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: username
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: wishlist_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - backend
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "60", "1000", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis_data:/data
+    networks:
+      - backend
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.2"
+          memory: 256M
+
+  backapi:
+    build:
+      context: ./withlist-api
+      dockerfile: Dockerfile
+    environment:
+      ENVIRONMENT: "production"
+      DATABASE_URL: "postgresql://username:password@postgres:5432/wishlist_db"
+      REDIS_URL: "redis://redis:6379/0"
+      SECRET_KEY: "your-super-secret-key-change-in-production"
+      ALGORITHM: "HS256"
+      ACCESS_TOKEN_EXPIRE_MINUTES: "30"
+      ALLOWED_ORIGINS: "http://localhost"
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - backend
+    expose:
+      - "8000"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+          
+
+  frontui:
+    build:
+      context: ./wishlist-ui
+      dockerfile: Dockerfile
+    depends_on:
+      - backapi
+    networks:
+      - frontend
+      - backend
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.3"
+          memory: 256M
+    ports:
+      - "80:80"
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  frontend:
+  backend:
